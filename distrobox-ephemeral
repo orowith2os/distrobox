@@ -39,7 +39,7 @@ distrobox_path="$(dirname "${0}")"
 extra_flags=""
 rootful=0
 verbose=0
-version="1.3.2"
+version="1.4.1"
 
 # Print usage to stdout.
 # Arguments:
@@ -112,7 +112,6 @@ while :; do
 	esac
 done
 
-set -o errexit
 set -o nounset
 # set verbosity
 if [ "${verbose}" -ne 0 ]; then
@@ -125,7 +124,7 @@ if [ "${rootful}" -ne 0 ]; then
 	extra_flags="${extra_flags} --root"
 fi
 
-name=$(  mktemp -u distrobox-XXXXXXXXXX)
+name=$(mktemp -u distrobox-XXXXXXXXXX)
 # shellcheck disable=SC2086
 "${distrobox_path}"/distrobox-create --name ${name} --yes ${create_flags} ${extra_flags}
 # shellcheck disable=SC2086

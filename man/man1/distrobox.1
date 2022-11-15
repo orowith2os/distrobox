@@ -15,7 +15,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "DISTROBOX" "1" "Jul 2022" "Distrobox" "User Manual"
+.TH "DISTROBOX" "1" "Nov 2022" "Distrobox" "User Manual"
 .hy
 .SH COMPATIBILITY
 .PP
@@ -23,10 +23,13 @@ This project \f[B]does not need a dedicated image\f[R].
 It can use any OCI images from docker-hub, quay.io, or any registry of
 your choice.
 .PP
-Granted, they may not be as featureful as expected (some of them do not
-even have \f[V]which\f[R], \f[V]mount\f[R], \f[V]less\f[R] or
-\f[V]vi\f[R]) but that\[cq]s all doable in the container itself after
-bootstrapping it.
+Many cloud images are stripped down on purpose to save size and may not
+include commands such as \f[V]which\f[R], \f[V]mount\f[R],
+\f[V]less\f[R] or \f[V]vi\f[R]).
+Additional packages can be installed once inside the container.
+We recommend using your preferred automation tool inside the container
+if you find yourself having to repeatedly create new containers.
+Maintaining your own custom image is also an option.
 .PP
 The main concern is having basic Linux utilities (\f[V]mount\f[R]),
 basic user management utilities (\f[V]usermod, passwd\f[R]), and
@@ -38,7 +41,7 @@ basic user management utilities (\f[V]usermod, passwd\f[R]), and
 .PP
 It depends either on \f[V]podman\f[R] configured in
 \f[V]rootless mode\f[R] or on \f[V]docker\f[R] configured without sudo
-(follow THIS
+(follow THESE
 instructions (https://docs.docker.com/engine/install/linux-postinstall/))
 .IP \[bu] 2
 Minimum podman version: \f[B]2.1.0\f[R]
@@ -94,17 +97,11 @@ T}
 T{
 AmazonLinux
 T}@T{
-1 2
+1 2 2022
 T}@T{
 public.ecr.aws/amazonlinux/amazonlinux:1
 public.ecr.aws/amazonlinux/amazonlinux:2
-T}
-T{
-AmazonLinux
-T}@T{
-2022
-T}@T{
-public.ecr.aws/amazonlinux/amazonlinux:2022
+public.ecr.aws/amazonlinux/amazonlinux:2022.0.20220531.0
 T}
 T{
 Archlinux
@@ -171,7 +168,7 @@ Gentoo Linux
 T}@T{
 rolling
 T}@T{
-You will have to Build your own to have a complete Gentoo docker image
+docker.io/gentoo/stage3:latest
 T}
 T{
 Kali Linux
@@ -212,10 +209,8 @@ T}
 T{
 Oracle Linux
 T}@T{
-6 6-slim 7 7-slim 8 8-slim 9 9-slim
+7 7-slim 8 8-slim 9 9-slim
 T}@T{
-container-registry.oracle.com/os/oraclelinux:6
-container-registry.oracle.com/os/oraclelinux:6-slim
 container-registry.oracle.com/os/oraclelinux:7
 container-registry.oracle.com/os/oraclelinux:7-slim
 container-registry.oracle.com/os/oraclelinux:8
@@ -230,7 +225,6 @@ T}@T{
 T}@T{
 registry.access.redhat.com/ubi7/ubi
 registry.access.redhat.com/ubi7/ubi-init
-registry.access.redhat.com/ubi7/ubi-minimal
 registry.access.redhat.com/ubi8/ubi
 registry.access.redhat.com/ubi8/ubi-init
 registry.access.redhat.com/ubi8/ubi-minimal
@@ -241,10 +235,10 @@ T}
 T{
 Rocky Linux
 T}@T{
-8 8-minimal
+8 8-minimal 9
 T}@T{
 quay.io/rockylinux/rockylinux:8 quay.io/rockylinux/rockylinux:8-minimal
-quay.io/rockylinux/rockylinux:latest
+quay.io/rockylinux/rockylinux:9 quay.io/rockylinux/rockylinux:latest
 T}
 T{
 Scientific Linux
@@ -263,11 +257,11 @@ T}
 T{
 Ubuntu
 T}@T{
-14.04 16.04 18.04 20.04 21.10 22.04
+14.04 16.04 18.04 20.04 22.04 22.10
 T}@T{
 docker.io/library/ubuntu:14.04 docker.io/library/ubuntu:16.04
 docker.io/library/ubuntu:18.04 docker.io/library/ubuntu:20.04
-docker.io/library/ubuntu:21.10 docker.io/library/ubuntu:22.04
+docker.io/library/ubuntu:22.04
 T}
 T{
 Void Linux
@@ -329,7 +323,7 @@ dependencies are met.
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "DISTROBOX-CREATE" "1" "Jul 2022" "Distrobox" "User Manual"
+.TH "DISTROBOX-CREATE" "1" "Nov 2022" "Distrobox" "User Manual"
 .hy
 .SH NAME
 .IP
@@ -369,7 +363,9 @@ usb devices and graphical apps (X11/Wayland), and audio.
 --pre-init-hooks    additional commands to execute prior to container initialization
 --init/-I       use init system (like systemd) inside the container.
             this will make host\[aq]s processes not visible from within the container.
+--compatibility/-C: show list of compatible images
 --help/-h:      show this message
+--no-entry:             do not generate a container entry in the application list
 --dry-run/-d:       only print the container manager command generated
 --verbose/-v:       show more verbosity
 --version/-V:       show version
@@ -415,6 +411,7 @@ Supported environment variables:
 \f[C]
 DBX_CONTAINER_ALWAYS_PULL
 DBX_CONTAINER_CUSTOM_HOME
+DBX_CONTAINER_HOME_PREFIX
 DBX_CONTAINER_IMAGE
 DBX_CONTAINER_MANAGER
 DBX_CONTAINER_NAME
@@ -422,6 +419,11 @@ DBX_NON_INTERACTIVE
 DBX_SUDO_PROGRAM
 \f[R]
 .fi
+.PP
+DBX_CONTAINER_HOME_PREFIX defines where containers\[cq] home directories
+will be located.
+If you define it as \[ti]/dbx then all future containers\[cq] home
+directories will be \[ti]/dbx/$container_name
 .PP
 The \f[V]--additional-flags\f[R] or \f[V]-a\f[R] is useful to modify
 defaults in the container creations.
@@ -505,6 +507,14 @@ integration\f[R].
 From within the container you will not be able to see and manage
 host\[cq]s processes.
 This is needed because \f[V]/sbin/init\f[R] must be pid 1.
+.PP
+The \f[V]--home\f[R] flag let\[cq]s you specify a custom HOME for the
+container.
+Note that this will NOT prevent the mount of the host\[cq]s home
+directory, but will ensure that configs and dotfiles will not litter it.
+.PP
+From version 1.4.0 of distrobox, when you create a new container, it
+will also generate an entry in the applications list.
 .\
 .\"
 .\" Define V font for inline verbatim, using C font in formats
@@ -521,7 +531,7 @@ This is needed because \f[V]/sbin/init\f[R] must be pid 1.
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "DISTROBOX-ENTER" "1" "Jul 2022" "Distrobox" "User Manual"
+.TH "DISTROBOX-ENTER" "1" "Nov 2022" "Distrobox" "User Manual"
 .hy
 .SH NAME
 .IP
@@ -647,7 +657,7 @@ run distrobox commands involving rootful containers using `doas'.
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "DISTROBOX-EPHEMERAL" "1" "Jul 2022" "Distrobox" "User Manual"
+.TH "DISTROBOX-EPHEMERAL" "1" "Nov 2022" "Distrobox" "User Manual"
 .hy
 .SH NAME
 .IP
@@ -728,7 +738,7 @@ a list of supported environment variables to use.
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "DISTROBOX-EXPORT" "1" "Jul 2022" "Distrobox" "User Manual"
+.TH "DISTROBOX-EXPORT" "1" "Nov 2022" "Distrobox" "User Manual"
 .hy
 .SH NAME
 .IP
@@ -983,7 +993,58 @@ option to provide a series of flags, for example:
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "DISTROBOX-HOST-EXEC" "1" "Jul 2022" "Distrobox" "User Manual"
+.TH "DISTROBOX-GENERATE-ENTRY" "1" "Nov 2022" "Distrobox" "User Manual"
+.hy
+.SH NAME
+.IP
+.nf
+\f[C]
+distrobox generate-entry
+\f[R]
+.fi
+.SH DESCRIPTION
+.PP
+distrobox-generate-entry will create a desktop icon for one of the
+available distroboxes.
+This will be then deleted when you remove the matching distrobox.
+.SH SYNOPSIS
+.PP
+\f[B]distrobox generate-entry\f[R]
+.IP
+.nf
+\f[C]
+    --help/-h:            show this message
+    --all/-a:              perform for all distroboxes
+    --delete/-d:            delete the entry
+    --icon/-i:            specify a custom icon [/path/to/icon] (default auto)
+    --verbose/-v:          show more verbosity
+    --version/-V:          show version
+\f[R]
+.fi
+.SH EXAMPLES
+.IP
+.nf
+\f[C]
+distrobox-generate-entry container-name [--delete] [--icon [auto,/path/to/icon]]
+\f[R]
+.fi
+.\
+.\"
+.\" Define V font for inline verbatim, using C font in formats
+.\" that render this, and otherwise B font.
+.ie "\f[CB]x\f[]"x" \{\
+. ftr V B
+. ftr VI BI
+. ftr VB B
+. ftr VBI BI
+.\}
+.el \{\
+. ftr V CR
+. ftr VI CI
+. ftr VB CB
+. ftr VBI CBI
+.\}
+.TH "DISTROBOX-HOST-EXEC" "1" "Nov 2022" "Distrobox" "User Manual"
 .hy
 .SH NAME
 .IP
@@ -997,10 +1058,9 @@ distrobox-host-exec
 distrobox-host-exec lets one execute command on the host, while inside
 of a container.
 .PP
-If \[lq]flatpak-spawn\[rq] is installed in the container, this is what
-is used, and it is the most powerful and recommended method.
-If, instead, \[lq]flatpak-spawn\[rq] can\[cq]t be found, it still try to
-get the job done with \[lq]host-spawn\[rq], an alternative project.
+Under the hood, distrobox-host-exec uses \f[V]host-spawn\f[R] a project
+that let\[cq]s us execute commands back on the host.
+If the tool is not found the user will be prompted to install it.
 .SH SYNOPSIS
 .PP
 Just pass to \[lq]distrobox-host-exec\[rq] any command and all its
@@ -1056,7 +1116,7 @@ distrobox-host-exec podman ps -a
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "DISTROBOX-INIT" "1" "Jul 2022" "Distrobox" "User Manual"
+.TH "DISTROBOX-INIT" "1" "Nov 2022" "Distrobox" "User Manual"
 .hy
 .SH NAME
 .IP
@@ -1092,6 +1152,7 @@ ensure the tight integration.
 --help/-h:      show this message
 --init/-I:      whether to use or not init
 --pre-init-hooks:   commands to execute prior to init
+--upgrade/-U:       run init in upgrade mode
 --verbose/-v:       show more verbosity
 --version/-V:       show version
 --:         end arguments execute the rest as command to execute during init
@@ -1102,6 +1163,7 @@ ensure the tight integration.
 .nf
 \f[C]
 distrobox-init --name test-user --user 1000 --group 1000 --home /home/test-user
+distrobox-init --upgrade
 \f[R]
 .fi
 .\
@@ -1120,7 +1182,7 @@ distrobox-init --name test-user --user 1000 --group 1000 --home /home/test-user
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "DISTROBOX-LIST" "1" "Jul 2022" "Distrobox" "User Manual"
+.TH "DISTROBOX-LIST" "1" "Nov 2022" "Distrobox" "User Manual"
 .hy
 .SH NAME
 .IP
@@ -1193,7 +1255,7 @@ DBX_SUDO_PROGRAM
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "DISTROBOX-RM" "1" "Jul 2022" "Distrobox" "User Manual"
+.TH "DISTROBOX-RM" "1" "Nov 2022" "Distrobox" "User Manual"
 .hy
 .SH NAME
 .IP
@@ -1214,6 +1276,7 @@ distrobox-rm delete one of the available distroboxes.
 \f[C]
 --name/-n:      name for the distrobox
 --force/-f:     force deletion
+--rm-home:      remove the mounted home if it differs from the host user\[aq]s one
 --root/-r:      launch podman/docker with root privileges. Note that if you need root this is the preferred
             way over \[dq]sudo distrobox\[dq] (note: if using a program other than \[aq]sudo\[aq] for root privileges is necessary,
             specify it through the DBX_SUDO_PROGRAM env variable, or \[aq]distrobox_sudo_program\[aq] config variable)
@@ -1266,7 +1329,7 @@ DBX_SUDO_PROGRAM
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "DISTROBOX-STOP" "1" "Jul 2022" "Distrobox" "User Manual"
+.TH "DISTROBOX-STOP" "1" "Nov 2022" "Distrobox" "User Manual"
 .hy
 .SH NAME
 .IP
@@ -1325,5 +1388,55 @@ DBX_CONTAINER_MANAGER
 DBX_CONTAINER_NAME
 DBX_NON_INTERACTIVE
 DBX_SUDO_PROGRAM
+\f[R]
+.fi
+.\
+.\"
+.\" Define V font for inline verbatim, using C font in formats
+.\" that render this, and otherwise B font.
+.ie "\f[CB]x\f[]"x" \{\
+. ftr V B
+. ftr VI BI
+. ftr VB B
+. ftr VBI BI
+.\}
+.el \{\
+. ftr V CR
+. ftr VI CI
+. ftr VB CB
+. ftr VBI CBI
+.\}
+.TH "DISTROBOX-UPGRADE" "1" "Nov 2022" "Distrobox" "User Manual"
+.hy
+.SH NAME
+.IP
+.nf
+\f[C]
+distrobox-upgrade
+\f[R]
+.fi
+.SH DESCRIPTION
+.PP
+distrobox-upgrade will enter the specified list of containers and will
+perform an upgrade using the container\[cq]s package manager.
+.SH SYNOPSIS
+.PP
+\f[B]distrobox upgrade\f[R]
+.IP
+.nf
+\f[C]
+--help/-h:      show this message
+--all/-a:       perform for all distroboxes
+--verbose/-v:       show more verbosity
+--version/-V:       show version
+\f[R]
+.fi
+.SH EXAMPLES
+.IP
+.nf
+\f[C]
+distrobox-upgrade --all
+distrobox-upgrade alpine-linux ubuntu22 my-distrobox123
+distrobox upgrade CONTAINER_NAME [CONTAINER_NAME1 CONTAINER_NAME2 ...]
 \f[R]
 .fi

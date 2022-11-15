@@ -1,5 +1,4 @@
 - [Distrobox](README.md)
-  - [Execute complex commands directly from distrobox enter](#execute-complex-commands-directly-from-distrobox-enter)
   - [Create a distrobox with a custom HOME directory](#create-a-distrobox-with-a-custom-home-directory)
   - [Mount additional volumes in a distrobox](#mount-additional-volumes-in-a-distrobox)
   - [Use a different shell than the host](#use-a-different-shell-than-the-host)
@@ -15,7 +14,6 @@
   - [Using init system inside a distrobox](#using-init-system-inside-a-distrobox)
   - [Using distrobox as main cli](#using-distrobox-as-main-cli)
   - [Using a different architecture](#using-a-different-architecture)
-  - [Improve distrobox enter performance](#improve-distrobox-enter-performance)
   - [Slow creation on podman and image size getting bigger with distrobox create](#slow-creation-on-podman-and-image-size-getting-bigger-with-distrobox-create)
   - [Container save and restore](#container-save-and-restore)
   - [Check used resources](#check-used-resources)
@@ -27,19 +25,16 @@
 
 # Useful tips
 
-## Execute complex commands directly from distrobox enter
+## Launch a distrobox from you applications list
 
-Sometimes it is necessary to execure complex commands from a distrobox enter,
-like multiple concatenated commands using variables declared **inside** the container.
+Starting from distrobox 1.4.0, containers created will automatically generate a desktop entry.
+For containers generated with older versions, you can use:
 
-For example:
+`distrobox generate-entry you-container-name`
 
-`distrobox enter test -- bash -l -c '"echo \$HOME && whoami"'`
+To delete it:
 
-Note the use of **single quotes around double quotes**, this is necessary so that
-quotes are preserved inside the arguments. Also note the **dollar escaping** needed
-so that $HOME is not evaluated at the time of the command launch, but directly
-inside the container.
+`distrobox generate-entry you-container-name --delete`
 
 ## Create a distrobox with a custom HOME directory
 
@@ -48,7 +43,7 @@ usage [HERE](./usage/distrobox-create.md)
 
 Simply use:
 
-`distrobox create --name test --image your-choosen-image:tag --home /your/custom/home`
+`distrobox create --name test --image your-chosen-image:tag --home /your/custom/home`
 
 ## Mount additional volumes in a distrobox
 
@@ -57,11 +52,18 @@ usage [HERE](./usage/distrobox-create.md)
 
 Simply use:
 
-`distrobox create --name test --image your-choosen-image:tag --volume /your/custom/volume/path`
+`distrobox create --name test --image your-chosen-image:tag --volume /your/custom/volume/path`
 
 ## Use a different shell than the host
 
-By default distrobox will pick up the shell from the host and use it inside the container.
+From version 1.4.0, `distrobox enter` will execute the login shell of the container's user
+by default. So, just change the default shell in the container using:
+
+`chsh -s /bin/shell-to-use`
+
+exit and log back in the container.
+
+For version older than 1.4.0, distrobox will pick up the shell from the host and use it inside the container.
 If you want a different one you can use:
 
 `SHELL=/bin/zsh distrobox create -n test`
@@ -79,7 +81,7 @@ Instead of running `sudo distrobox` to do stuff, it is better to simply use norm
 command with the `--root` or `-r` flag, so that distrobox can still integrate better
 with your `$USER`.
 
-`distrobox create --name test --image your-choosen-image:tag --root`
+`distrobox create --name test --image your-chosen-image:tag --root`
 
 ## Using a command other than sudo to run a rootful container
 
@@ -162,7 +164,7 @@ You can create a distrobox with will have the same hostname as the host by
 creating it with the following init-hook:
 
 ```sh
-distrobox create --name test --image your-choosen-image:tag \
+distrobox create --name test --image your-chosen-image:tag \
                   --init-hooks '"$(uname -n)" > /etc/hostname'`
 ```
 
@@ -179,7 +181,7 @@ If you want to have a separate system remote between host and container,
 you can create your distrobox with the followint init-hook:
 
 ```sh
-distrobox create --name test --image your-choosen-image:tag \
+distrobox create --name test --image your-chosen-image:tag \
                         --init-hooks 'umount /var/lib/flatpak'`
 ```
 
@@ -278,15 +280,6 @@ aarch64
 
 ![image](https://user-images.githubusercontent.com/598882/170837120-9170a9fa-6153-4684-a435-d60a0136b563.png)
 
-## Improve distrobox enter performance
-
-If you are experiencing a bit slow performance using `podman` you should enable
-the podman socket using
-
-`systemctl --user enable --now podman.socket`
-
-this will improve a lot `podman`'s command performances.
-
 ## Slow creation on podman and image size getting bigger with distrobox create
 
 For rootless podman 3.4.0 and upward, adding this to your `~/.config/containers/storage.conf`
@@ -376,7 +369,7 @@ the shell you use on the host is not available in the default repos (e.g.
 Use the pre-initialization hooks for this:
 
 ```shell
-distrobox create -i docker.io/almalinux/8-init --init --name test --pre-init-hooks "dnf config-manager --enable powertools && dnf -y install epel-release"
+distrobox create -i docker.io/almalinux/8-init --init --name test --pre-init-hooks "dnf -y install dnf-plugins-core && dnf config-manager --enable powertools && dnf -y install epel-release"
 ```
 
 ```shell
@@ -384,5 +377,5 @@ distrobox create -i docker.io/library/almalinux:9 -n alma9 --pre-init-hooks "dnf
 ```
 
 ```shell
-distrobox create -i quay.io/centos/centos:stream8 c8s --pre-init-hooks "dnf config-manager --enable powertools && dnf -y install epel-next-release"
+distrobox create -i quay.io/centos/centos:stream9 c9s --pre-init-hooks "dnf -y install dnf-plugins-core && dnf config-manager --enable crb && dnf -y install epel-next-release"
 ```

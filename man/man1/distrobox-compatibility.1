@@ -15,7 +15,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "DISTROBOX" "1" "Jul 2022" "Distrobox" "User Manual"
+.TH "DISTROBOX" "1" "Nov 2022" "Distrobox" "User Manual"
 .hy
 .SH COMPATIBILITY
 .PP
@@ -23,10 +23,13 @@ This project \f[B]does not need a dedicated image\f[R].
 It can use any OCI images from docker-hub, quay.io, or any registry of
 your choice.
 .PP
-Granted, they may not be as featureful as expected (some of them do not
-even have \f[V]which\f[R], \f[V]mount\f[R], \f[V]less\f[R] or
-\f[V]vi\f[R]) but that\[cq]s all doable in the container itself after
-bootstrapping it.
+Many cloud images are stripped down on purpose to save size and may not
+include commands such as \f[V]which\f[R], \f[V]mount\f[R],
+\f[V]less\f[R] or \f[V]vi\f[R]).
+Additional packages can be installed once inside the container.
+We recommend using your preferred automation tool inside the container
+if you find yourself having to repeatedly create new containers.
+Maintaining your own custom image is also an option.
 .PP
 The main concern is having basic Linux utilities (\f[V]mount\f[R]),
 basic user management utilities (\f[V]usermod, passwd\f[R]), and
@@ -38,7 +41,7 @@ basic user management utilities (\f[V]usermod, passwd\f[R]), and
 .PP
 It depends either on \f[V]podman\f[R] configured in
 \f[V]rootless mode\f[R] or on \f[V]docker\f[R] configured without sudo
-(follow THIS
+(follow THESE
 instructions (https://docs.docker.com/engine/install/linux-postinstall/))
 .IP \[bu] 2
 Minimum podman version: \f[B]2.1.0\f[R]
@@ -94,17 +97,11 @@ T}
 T{
 AmazonLinux
 T}@T{
-1 2
+1 2 2022
 T}@T{
 public.ecr.aws/amazonlinux/amazonlinux:1
 public.ecr.aws/amazonlinux/amazonlinux:2
-T}
-T{
-AmazonLinux
-T}@T{
-2022
-T}@T{
-public.ecr.aws/amazonlinux/amazonlinux:2022
+public.ecr.aws/amazonlinux/amazonlinux:2022.0.20220531.0
 T}
 T{
 Archlinux
@@ -171,7 +168,7 @@ Gentoo Linux
 T}@T{
 rolling
 T}@T{
-You will have to Build your own to have a complete Gentoo docker image
+docker.io/gentoo/stage3:latest
 T}
 T{
 Kali Linux
@@ -212,10 +209,8 @@ T}
 T{
 Oracle Linux
 T}@T{
-6 6-slim 7 7-slim 8 8-slim 9 9-slim
+7 7-slim 8 8-slim 9 9-slim
 T}@T{
-container-registry.oracle.com/os/oraclelinux:6
-container-registry.oracle.com/os/oraclelinux:6-slim
 container-registry.oracle.com/os/oraclelinux:7
 container-registry.oracle.com/os/oraclelinux:7-slim
 container-registry.oracle.com/os/oraclelinux:8
@@ -230,7 +225,6 @@ T}@T{
 T}@T{
 registry.access.redhat.com/ubi7/ubi
 registry.access.redhat.com/ubi7/ubi-init
-registry.access.redhat.com/ubi7/ubi-minimal
 registry.access.redhat.com/ubi8/ubi
 registry.access.redhat.com/ubi8/ubi-init
 registry.access.redhat.com/ubi8/ubi-minimal
@@ -241,10 +235,10 @@ T}
 T{
 Rocky Linux
 T}@T{
-8 8-minimal
+8 8-minimal 9
 T}@T{
 quay.io/rockylinux/rockylinux:8 quay.io/rockylinux/rockylinux:8-minimal
-quay.io/rockylinux/rockylinux:latest
+quay.io/rockylinux/rockylinux:9 quay.io/rockylinux/rockylinux:latest
 T}
 T{
 Scientific Linux
@@ -263,11 +257,11 @@ T}
 T{
 Ubuntu
 T}@T{
-14.04 16.04 18.04 20.04 21.10 22.04
+14.04 16.04 18.04 20.04 22.04 22.10
 T}@T{
 docker.io/library/ubuntu:14.04 docker.io/library/ubuntu:16.04
 docker.io/library/ubuntu:18.04 docker.io/library/ubuntu:20.04
-docker.io/library/ubuntu:21.10 docker.io/library/ubuntu:22.04
+docker.io/library/ubuntu:22.04
 T}
 T{
 Void Linux

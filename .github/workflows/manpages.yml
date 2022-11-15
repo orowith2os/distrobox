@@ -49,10 +49,12 @@ jobs:
       # Fetch from compatibility table all the distros supported
       - id: generate
         run: |
-          RELEASE=$(curl -L https://github.com/jgm/pandoc/releases/latest | grep href | grep pandoc | grep download | grep deb | grep amd64 | tail -1 | cut -d'"' -f2)
+          VERSION=2.19.2
+          RELEASE="jgm/pandoc/releases/download/${VERSION}/pandoc-${VERSION}-1-amd64.deb"
           NAME=$(echo $RELEASE | rev | cut -d'/' -f1 | rev)
 
           curl -L https://github.com/$RELEASE -o $NAME
+          sudo apt-get update
           sudo apt-get install -y ./$NAME
           sudo apt-get install -y ronn
 

@@ -43,7 +43,7 @@ host_home="${DISTROBOX_HOST_HOME:-"${HOME}"}"
 is_sudo=""
 rootful=""
 verbose=0
-version="1.3.2"
+version="1.4.1"
 
 # We depend on some commands, let's be sure we have them
 base_dependencies="basename grep sed find"
@@ -214,10 +214,24 @@ if [ -n "${exported_bin}" ] && [ -z "${dest_path}" ]; then
 	exit 2
 fi
 
-# We can assume this as we set it the same as container name during creation.
-container_name=$(uname -n | cut -d'.' -f1)
+if  [ -n "${CONTAINER_ID}" ]; then
+	container_name="${CONTAINER_ID}"
+# if the variable is not set, let's fall back to some tricks.
+elif  [ -e /.dockerenv ]; then
+	# we're in docker, let's use this trick
+	container_name=$(grep "memory:/" < /proc/self/cgroup | sed 's|.*/||')
+elif [ -e /run/.containerenv ]; then
+	# we're in podman, use this other trick
+	container_name=$(grep "name=" /run/.containerenv | cut -d'=' -f2- | tr -d '"')
+fi
+# If one of the previous methods didn't work
+# let's fallback to a more simple way but error prone
+if [ -z "${container_name}" ]; then
+	container_name=$(uname -n | cut -d'.' -f1)
+fi
+
 # Prefix to add to an existing command to work throught the container
-container_command_prefix="${DISTROBOX_ENTER_PATH:-"distrobox-enter"} ${rootful} -n ${container_name} -- '${is_sudo} "
+container_command_prefix="${DISTROBOX_ENTER_PATH:-"distrobox-enter"} ${rootful} -n ${container_name} -- ${is_sudo} "
 if [ -z "${exported_app_label}" ]; then
 	exported_app_label=" (on ${container_name})"
 fi
@@ -226,17 +240,33 @@ fi
 # Arguments:
 #	none it will use the ones set up globally
 # Outputs:
-#   print generated script.
+#	print generated script.
 generate_script() {
 	cat << EOF
 #!/bin/sh
 # distrobox_binary
 # name: ${container_name}
 if [ ! -f /run/.containerenv ] && [ ! -f /.dockerenv ]; then
-    ${DISTROBOX_ENTER_PATH:-"distrobox-enter"} ${rootful} -n ${container_name} -- \
-		${is_sudo} ${exported_bin} ${extra_flags} \$@
+	command="${DISTROBOX_ENTER_PATH:-"distrobox-enter"} ${rootful} -n ${container_name} -- \
+${is_sudo} ${exported_bin} ${extra_flags} "
+
+	for arg in "\$@"; do
+		if echo "\${arg}" | grep -Eq "'|\""; then
+			command="\${command} \\
+				\$(echo "\${arg}" | sed 's|\\\|\\\\\\\|g' |
+				sed 's| |\\\ |g' |
+				sed 's|\\$|\\\\\\$|g' |
+				sed "s|'|\\\\\'|g" |
+				sed 's|"|\\\\\"|g')"
+		elif echo "\${arg}" | grep -q "'"; then
+			command="\${command} \"\${arg}\""
+		else
+			command="\${command} '\${arg}'"
+		fi
+	done
+	eval \${command}
 else
-    ${exported_bin} \$@
+	${exported_bin} "\$@"
 fi
 EOF
 	return $?
@@ -302,6 +332,12 @@ export_binary() {
 #	needed desktop files in /run/host/$host_home/.local/share/applications
 #	or error code.
 export_application() {
+	canon_dirs=""
+	[ -d /usr/share/applications ] && canon_dirs="/usr/share/applications"
+	[ -d /usr/local/share/applications ] && canon_dirs="${canon_dirs} /usr/local/share/applications"
+	[ -d /var/lib/flatpak/exports/share/applications ] &&
+		canon_dirs="${canon_dirs} /var/lib/flatpak/exports/share/applications"
+	[ -d "${HOME}/.local/share/applications" ] && canon_dirs="${canon_dirs} ${HOME}/.local/share/applications"
 
 	# In this phase we search for applications to export.
 	# First find command will grep throught all files in the canonical directories
@@ -311,17 +347,13 @@ export_application() {
 	# it is possible to export an app not only by its executable name but also
 	# by its launcher name.
 	desktop_files=$(
-		find /usr/share/applications \
-			/usr/local/share/applications \
-			/var/lib/flatpak/exports/share/applications \
-			"${HOME}"/.local/share/applications \
+		# shellcheck disable=SC2086
+		find ${canon_dirs} \
 			-type f \
 			-exec grep -qle "Exec=.*${exported_app}.*" {} \; \
 			-exec grep -Le "Exec=.*${DISTROBOX_ENTER_PATH:-"distrobox-enter"}.*" {} \;
-		find /usr/share/applications \
-			/usr/local/share/applications \
-			/var/lib/flatpak/exports/share/applications \
-			"${HOME}"/.local/share/applications \
+		# shellcheck disable=SC2086
+		find ${canon_dirs} \
 			-name "${exported_app}*"
 	)
 
@@ -403,7 +435,6 @@ export_application() {
 		# throught the container separation
 		sed "s|^Exec=|Exec=${container_command_prefix} |g" "${desktop_file}" |
 			sed "s|\(%.*\)|${extra_flags} \1|g" |
-			sed "s|^Exec=.*|&'|g" |
 			sed "/^TryExec=.*/d" |
 			sed "/^DBusActivatable=true/d" |
 			sed "s|Name.*|& ${exported_app_label}|g" \
@@ -411,8 +442,8 @@ export_application() {
 		# in the end we add the final quote we've opened in the "container_command_prefix"
 
 		if ! grep -q "StartupWMClass" "/run/host${host_home}/.local/share/applications/${desktop_home_file}"; then
-			printf "StartupWMClass=%s\n" "${exported_app}" >> \
-				"/run/host${host_home}/.local/share/applications/${desktop_home_file}"
+			printf "StartupWMClass=%s\n" "${exported_app}" >> "\
+/run/host${host_home}/.local/share/applications/${desktop_home_file}"
 		fi
 		# In case of an icon in a non canonical path, we need to replace the path
 		# in the desktop file.
@@ -455,6 +486,7 @@ export_service() {
 	# find the service file in the common
 	service_file=$(find \
 		/etc/systemd/system/ /lib/systemd/system/ /usr/lib/systemd/system/ \
+		/lib/systemd/user/ /usr/lib/systemd/user/ \
 		"${host_home}"/.config/systemd/user/ \
 		-type f -name "${exported_service}*" 2> /dev/null | tail -1)
 
@@ -502,8 +534,7 @@ export_service() {
 			# Add extra flags
 			# Add closing quote
 			sed "s|^${exec_cmd}=|${exec_cmd}=${container_command_prefix}|g" "${temp_file}" |
-				sed "s|^${exec_cmd}=.*|& ${extra_flags}|g" |
-				sed "s|^${exec_cmd}=.*|&'|g" > "${exported_service_fullpath}"
+				sed "s|^${exec_cmd}=.*|& ${extra_flags}|g" > "${exported_service_fullpath}"
 			# in the end we add the final quote we've opened in the "container_command_prefix"
 		fi
 	done

@@ -25,9 +25,11 @@
 # Optional env variables:
 #	DBX_CONTAINER_ALWAYS_PULL
 #	DBX_CONTAINER_CUSTOM_HOME
+#	DBX_CONTAINER_HOME_PREFIX
 #	DBX_CONTAINER_IMAGE
 #	DBX_CONTAINER_MANAGER
 #	DBX_CONTAINER_NAME
+#	DBX_CONTAINER_ENTRY
 #	DBX_NON_INTERACTIVE
 #	DBX_SUDO_PROGRAM
 
@@ -44,11 +46,13 @@ fi
 # Defaults
 container_always_pull=0
 container_clone=""
+container_home_prefix=""
 container_image=""
 container_image_default="registry.fedoraproject.org/fedora-toolbox:36"
 container_init_hook=""
 container_manager="autodetect"
 container_manager_additional_flags=""
+container_entry=1
 container_name=""
 container_pre_init_hook=""
 container_user_custom_home=""
@@ -60,17 +64,30 @@ distrobox_sudo_program="sudo"
 dryrun=0
 init=0
 non_interactive=0
+# Use cd + dirname + pwd so that we do not have relative paths in mount points
+# We're not using "realpath" here so that symlinks are not resolved this way
+# "realpath" would break situations like Nix or similar symlink based package
+# management.
+distrobox_entrypoint_path="$(cd "$(dirname "${0}")" && pwd)/distrobox-init"
+distrobox_export_path="$(cd "$(dirname "${0}")" && pwd)/distrobox-export"
+distrobox_hostexec_path="$(cd "$(dirname "${0}")" && pwd)/distrobox-host-exec"
+# In case init or export are not in the same path as create, let's search
+# in PATH for them.
+[ ! -e "${distrobox_entrypoint_path}" ] && distrobox_entrypoint_path="$(command -v distrobox-init)"
+[ ! -e "${distrobox_export_path}" ] && distrobox_export_path="$(command -v distrobox-export)"
+[ ! -e "${distrobox_hostexec_path}" ] && distrobox_hostexec_path="$(command -v distrobox-hostexec)"
 rootful=0
 verbose=0
-version="1.3.2"
+version="1.4.1"
 
 # Source configuration files, this is done in an hierarchy so local files have
 # priority over system defaults
 # leave priority to environment variables.
 config_files="
 	/usr/share/distrobox/distrobox.conf
+	/usr/etc/distrobox/distrobox.conf
 	/etc/distrobox/distrobox.conf
-	${HOME}/.config/distrobox/distrobox.conf
+	${XDG_CONFIG_HOME:-"${HOME}/.config"}/distrobox/distrobox.conf
 	${HOME}/.distroboxrc
 "
 for config_file in ${config_files}; do
@@ -85,9 +102,11 @@ done
 
 [ -n "${DBX_CONTAINER_ALWAYS_PULL}" ] && container_always_pull="${DBX_CONTAINER_ALWAYS_PULL}"
 [ -n "${DBX_CONTAINER_CUSTOM_HOME}" ] && container_user_custom_home="${DBX_CONTAINER_CUSTOM_HOME}"
+[ -n "${DBX_CONTAINER_HOME_PREFIX}" ] && container_home_prefix="${DBX_CONTAINER_HOME_PREFIX}"
 [ -n "${DBX_CONTAINER_IMAGE}" ] && container_image="${DBX_CONTAINER_IMAGE}"
 [ -n "${DBX_CONTAINER_MANAGER}" ] && container_manager="${DBX_CONTAINER_MANAGER}"
 [ -n "${DBX_CONTAINER_NAME}" ] && container_name="${DBX_CONTAINER_NAME}"
+[ -n "${DBX_CONTAINER_ENTRY}" ] && container_entry="${DBX_CONTAINER_ENTRY}"
 [ -n "${DBX_NON_INTERACTIVE}" ] && non_interactive="${DBX_NON_INTERACTIVE}"
 [ -n "${DBX_SUDO_PROGRAM}" ] && distrobox_sudo_program="${DBX_SUDO_PROGRAM}"
 
@@ -125,14 +144,16 @@ Options:
 	--clone/-c:		name of the distrobox container to use as base for a new container
 				this will be useful to either rename an existing distrobox or have multiple copies
 				of the same environment.
-	--home/-H		select a custom HOME directory for the container. Useful to avoid host's home littering with temp files.
-	--volume		additional volumes to add to the container
+	--home/-H:		select a custom HOME directory for the container. Useful to avoid host's home littering with temp files.
+	--volume:		additional volumes to add to the container
 	--additional-flags/-a:	additional flags to pass to the container manager command
-	--init-hooks		additional commands to execute during container initialization
-	--pre-init-hooks	additional commands to execute prior to container initialization
-	--init/-I		use init system (like systemd) inside the container.
+	--init-hooks:		additional commands to execute during container initialization
+	--pre-init-hooks:	additional commands to execute prior to container initialization
+	--init/-I:		use init system (like systemd) inside the container.
 				this will make host's processes not visible from within the container.
+	--compatibility/-C:	show list of compatible images
 	--help/-h:		show this message
+	--no-entry:		do not generate a container entry in the application list
 	--dry-run/-d:		only print the container manager command generated
 	--verbose/-v:		show more verbosity
 	--version/-V:		show version
@@ -141,8 +162,40 @@ Compatibility:
 
 	for a list of compatible images and container managers, please consult the man page:
 		man distrobox-compatibility
+	or run
+		distrobox create --compatibility
 	or consult the documentation page on: https://github.com/89luca89/distrobox/blob/main/docs/compatibility.md
 EOF
+}
+
+# Print list of compatible images to stdou, caching locally in a file.
+# Arguments:
+#   None
+# Outputs:
+#   print usage with examples.
+show_compatibility() {
+	if [ ! -e "${HOME}/.cache/distrobox-compatibility-${version}" ]; then
+		mkdir -p "${HOME}/.cache"
+
+		# If we don't have a cache file, we need connectivity. Ensure we have
+		# one and return error if not.
+		if ! curl -s "https://github.com" > /dev/null; then
+			printf >&2 "ERROR: no cache file and no connectivity found, cannot retrieve compatibility list.\n"
+			exit 1
+		fi
+		# We want to download the correspondent version of the compatibility table and extract a list from it.
+		# Always use the docs as source of truth for this.
+		curl -s \
+			"https://raw.githubusercontent.com/89luca89/distrobox/${version}/docs/compatibility.md" |
+			grep -A200 "^## Containers Distros" |
+			grep '|' |
+			cut -d '|' -f 4 |
+			sed 's|<br>|\n|g' |
+			tr -d ' ' |
+			sort -u |
+			tail -n+4 > "${HOME}/.cache/distrobox-compatibility-${version}"
+	fi
+	cat "${HOME}/.cache/distrobox-compatibility-${version}"
 }
 
 # Parse arguments
@@ -161,6 +214,10 @@ while :; do
 			printf "distrobox: %s\n" "${version}"
 			exit 0
 			;;
+		--no-entry)
+			shift
+			container_entry=0
+			;;
 		-d | --dry-run)
 			shift
 			dryrun=1
@@ -172,6 +229,10 @@ while :; do
 		-I | --init)
 			shift
 			init=1
+			;;
+		-C | --compatibility)
+			show_compatibility
+			exit 0
 			;;
 		-i | --image)
 			if [ -n "$2" ]; then
@@ -413,11 +474,14 @@ generate_command() {
 		--label \"manager=distrobox\"
 		--env \"SHELL=${SHELL:-"/bin/bash"}\"
 		--env \"HOME=${container_user_home}\"
-		--volume \"${container_user_home}\":\"${container_user_home}\":rslave
 		--volume /:/run/host:rslave
 		--volume /dev:/dev:rslave
 		--volume /sys:/sys:rslave
-		--volume /tmp:/tmp:rslave"
+		--volume /tmp:/tmp:rslave
+		--volume \"${distrobox_entrypoint_path}\":/usr/bin/entrypoint:ro
+		--volume \"${distrobox_export_path}\":/usr/bin/distrobox-export:ro
+		--volume \"${distrobox_hostexec_path}\":/usr/bin/distrobox-host-exec:ro
+		--volume \"${container_user_home}\":\"${container_user_home}\":rslave"
 
 	# This fix is needed as on Selinux systems, the host's selinux sysfs directory
 	# will be mounted inside the rootless container.
@@ -455,24 +519,54 @@ generate_command() {
 			--volume $(realpath /dev/shm):$(realpath /dev/shm)"
 	fi
 
-	# If you are using NixOS, or have Nix installed, /nix is a volume containing
+	# If you are using NixOS, or have Nix or Guix installed, /nix and /gnu are volumes containing
 	# you binaries and many configs.
-	# /nix needs to be mounted if you want to execute those binaries from within
-	# the container. Therefore we need to mount /nix as a volume, but only if it exists.
-	if [ -d "/nix" ]; then
+	# They be mounted if you want to execute those binaries from within
+	# the container. Therefore we need to mount as a volume, but only if they exists.
+	nix_dirs="
+		/nix
+		/gnu
+		/run/current-system/sw
+	"
+	for nix_dir in ${nix_dirs}; do
+		if [ -d "${nix_dir}" ]; then
+			result_command="${result_command}
+				--volume ${nix_dir}:${nix_dir}"
+		fi
+	done
+
+	# If we have a home prefix to use,
+	#	1- override the HOME env variable
+	#	2- export the DISTROBOX_HOST_HOME env variable pointing to original HOME
+	# 	3- mount the home inside the container.
+	if [ -n "${container_home_prefix}" ] && [ -z "${container_user_custom_home}" ]; then
+		if [ ! -d "${container_home_prefix}/${container_name}" ]; then
+			if ! mkdir -p "${container_home_prefix}/${container_name}"; then
+				printf >&2 "Do you have permission to write to %s?\n" "${container_home_prefix}"
+				exit 1
+			fi
+		fi
 		result_command="${result_command}
-        --volume /nix:/nix"
+			--env \"HOME=${container_home_prefix}/${container_name}\"
+			--env \"DISTROBOX_HOST_HOME=${container_user_home}/${container_name}\"
+			--volume ${container_home_prefix}/${container_name}:${container_home_prefix}/${container_name}:rslave"
 	fi
 
 	# If we have a custom home to use,
 	#	1- override the HOME env variable
-	#	2- expor the DISTROBOX_HOST_HOME env variable pointing to original HOME
+	#	2- export the DISTROBOX_HOST_HOME env variable pointing to original HOME
 	# 	3- mount the custom home inside the container.
 	if [ -n "${container_user_custom_home}" ]; then
+		if [ ! -d "${container_user_custom_home}" ]; then
+			if ! mkdir -p "${container_user_custom_home}"; then
+				printf >&2 "Do you have permission to write to %s?\n" "${container_user_custom_home}"
+				exit 1
+			fi
+		fi
 		result_command="${result_command}
-		--env \"HOME=${container_user_custom_home}\"
-		--env \"DISTROBOX_HOST_HOME=${container_user_home}\"
-		--volume ${container_user_custom_home}:${container_user_custom_home}:rslave"
+			--env \"HOME=${container_user_custom_home}\"
+			--env \"DISTROBOX_HOST_HOME=${container_user_home}\"
+			--volume \"${container_user_custom_home}:${container_user_custom_home}:rslave\""
 	fi
 
 	# Mount also the /var/home dir on ostree based systems
@@ -481,13 +575,13 @@ generate_command() {
 		[ -d "/var/home/${container_user_name}" ]; then
 
 		result_command="${result_command}
-		--volume \"/var/home/${container_user_name}\":\"/var/home/${container_user_name}\":rslave"
+			--volume \"/var/home/${container_user_name}\":\"/var/home/${container_user_name}\":rslave"
 	fi
 
 	# Mount also the XDG_RUNTIME_DIR to ensure functionality of the apps.
 	if [ -d "/run/user/${container_user_uid}" ]; then
 		result_command="${result_command}
-		--volume /run/user/${container_user_uid}:/run/user/${container_user_uid}:rslave"
+			--volume /run/user/${container_user_uid}:/run/user/${container_user_uid}:rslave"
 	fi
 
 	# These are dynamic configs needed by the container to function properly
@@ -544,6 +638,13 @@ generate_command() {
 	# Return generated command.
 	printf "%s" "${result_command}"
 }
+
+# Check that we have a complete distrobox installation or
+# entrypoint and export will not work.
+if [ -z "${distrobox_entrypoint_path}" ] || [ -z "${distrobox_export_path}" ]; then
+	printf >&2 "Error: no distrobox-init found in %s\n" "${PATH}"
+	exit 127
+fi
 
 # dry run mode, just generate the command and print it. No creation.
 if [ "${dryrun}" -ne 0 ]; then
@@ -622,6 +723,13 @@ if eval ${cmd} > /dev/null; then
 	else
 		printf "distrobox enter %s\n\n" "${container_name}"
 	fi
-	exit 0
+
+	# We've created the box, let's also create the entry
+	if [ "${rootful}" -eq 0 ]; then
+		if [ "${container_entry}" -ne 0 ]; then
+			"$(dirname "$(realpath "${0}")")/distrobox-generate-entry" "${container_name}"
+		fi
+	fi
+	exit $?
 fi
 printf >&2 "\033[31m [ ERR ]\n\033[0m"

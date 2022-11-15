@@ -77,6 +77,8 @@ if  [ -z "${prefix}" ]; then
 fi
 dest_path="${prefix}/bin"
 man_dest_path="${prefix}/share/man/man1"
+icon_dest_path="${prefix}/share/icons"
+completion_dest_path="${prefix}/share/bash-completion/completions/"
 
 set -o errexit
 set -o nounset
@@ -95,4 +97,10 @@ done
 for file in "${man_dest_path}/distrobox"*; do
 	[ -e "${file}" ] && rm "${file}"
 done
-echo "Thank you for using Distrobox. Uninstall complete."
+for file in "${completion_dest_path}/distrobox"*; do
+	[ -e "${file}" ] && rm "${file}"
+done
+[  -e "${icon_dest_path}"/terminal-distrobox-icon.png ] && rm "${icon_dest_path}"/terminal-distrobox-icon.png
+[  -e "${icon_dest_path}"/distrobox ] && rm -rf "${icon_dest_path}"/distrobox
+
+printf >&2 "\033[1;31m Thank you for using Distrobox. Uninstall complete.\n\033[0m"

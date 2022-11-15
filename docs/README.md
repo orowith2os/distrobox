@@ -38,6 +38,12 @@ graphical apps (X11/Wayland), and audio.
   - [Why?](#why)
     - [Aims](#aims)
 - [Installation](#installation)
+  - [Alternative methods](#alternative-methods)
+    - [Curl](#curl)
+    - [Git](#git)
+    - [Flatpak](#flatpak)
+  - [Dependencies](#dependencies)
+    - [Install Podman without root](compatibility.md#install-podman-in-a-static-manner)
   - [Uninstallation](#uninstallation)
 - [Compatibility](compatibility.md)
   - [Supported container managers](compatibility.md#supported-container-managers)
@@ -48,9 +54,11 @@ graphical apps (X11/Wayland), and audio.
     - [distrobox-create](usage/distrobox-create.md)
     - [distrobox-enter](usage/distrobox-enter.md)
     - [distrobox-ephemeral](usage/distrobox-ephemeral.md)
+    - [distrobox-generate-entry](usage/distrobox-generate-entry.md)
     - [distrobox-list](usage/distrobox-list.md)
     - [distrobox-rm](usage/distrobox-rm.md)
     - [distrobox-stop](usage/distrobox-stop.md)
+    - [distrobox-upgrade](usage/distrobox-upgrade.md)
   - [Inside the distrobox](usage/usage.md#inside-the-distrobox)
     - [distrobox-export](usage/distrobox-export.md)
     - [distrobox-host-exec](usage/distrobox-host-exec.md)
@@ -71,7 +79,6 @@ graphical apps (X11/Wayland), and audio.
   - [Using init system inside a distrobox](useful_tips.md#using-init-system-inside-a-distrobox)
   - [Using distrobox as main cli](useful_tips.md#using-distrobox-as-main-cli)
   - [Using a different architecture](useful_tips.md#using-a-different-architecture)
-  - [Improve distrobox-enter performance](useful_tips.md#improve-distrobox-enter-performance)
   - [Slow creation on podman and image size getting bigger with distrobox-create](useful_tips.md#slow-creation-on-podman-and-image-size-getting-bigger-with-distrobox-create)
   - [Container save and restore](useful_tips.md#container-save-and-restore)
   - [Check used resources](useful_tips.md#check-used-resources)
@@ -120,13 +127,15 @@ but in a simplified way using POSIX sh and aiming at broader compatibility.
 
 All the props go to them as they had the great idea to implement this stuff.
 
-It is divided into 8 commands:
+It is divided into 10 commands:
 
 - `distrobox-create` - creates the container
 - `distrobox-enter`  - to enter the container
 - `distrobox-list` - to list containers created with distrobox
 - `distrobox-rm` - to delete a container created with distrobox
 - `distrobox-stop` - to stop a running container created with distrobox
+- `distrobox-upgrade` - to upgrade one or more running containers created with distrobox at once
+- `distrobox-generate-entry` - to create an entry of a created container in the applications list
 - `distrobox-init`   - the entrypoint of the container (not meant to be used manually)
 - `distrobox-export` - it is meant to be used inside the container,
   useful to export apps and services from the container to the host
@@ -149,8 +158,8 @@ Fedora Silverblue on his project [ublue](https://github.com/castrojo/ublue)
 
 ## Why
 
-- Provide a mutable environment on an immutable OS, like Endless OS,
-  Fedora Silverblue, OpenSUSE MicroOS or SteamOS3
+- Provide a mutable environment on an immutable OS, like [Endless OS,
+  Fedora Silverblue, OpenSUSE MicroOS](compatibility.md#host-distros)  or [SteamOS3](posts/install_rootless.md)
 - Provide a locally privileged environment for sudoless setups
   (eg. company-provided laptops, security reasons, etc...)
 - To mix and match a stable base system (eg. Debian Stable, Ubuntu LTS, RedHat)
@@ -176,23 +185,14 @@ It also aims to enter the container **as fast as possible**, every millisecond
 adds up if you use the container as your default environment for your terminal:
 
 These are some sample results of `distrobox-enter` on the same container on my
-weak laptop from 2015 with 2 core cpu:
+weak laptop:
 
-```sh
-Total time for 100 container enters:
-
-  ~$ time (for i in {1..100}; do distrobox-enter --name fedora-toolbox-35 -- whoami; done)
-  real 0m36.209s
-  user 0m6.520s
-  sys 0m4.803s
-
-Mean:
-
-36.209s/100 = ~0.362ms mean time to enter the container
+```console
+~$ hyperfine --warmup 3 --runs 100 "distrobox enter bench -- whoami"
+Benchmark 1: distrobox enter bench -- whoami
+  Time (mean ± σ):     395.6 ms ±  10.5 ms    [User: 167.4 ms, System: 62.4 ms]
+  Range (min … max):   297.3 ms … 408.9 ms    100 runs
 ```
-
-I would like to keep it always below the
-[Doherty Treshold](https://lawsofux.com/doherty-threshold/) of 400ms.
 
 #### Security implications
 
@@ -202,7 +202,7 @@ The container will have complete access to your home, pen drives and so on,
 so do not expect it to be highly sandboxed like a plain
 docker/podman container or a flatpak.
 
-⚠️ **BE CAREFUL**: if you use docker, or you use podman with the `--root/-r` flag,
+⚠️ **BE CAREFUL**:⚠️  if you use docker, or you use podman with the `--root/-r` flag,
 the containers will run as root, so **root inside the rootful container can modify
 system stuff outside the container**,
 if you have security concern for this, **use podman that runs in rootless mode**.
@@ -223,10 +223,19 @@ Create a new distrobox:
 Enter created distrobox:
 
 `distrobox enter test`
+  
+Add [various](https://github.com/89luca89/distrobox/blob/main/docs/compatibility.md#host-distros)
+distroboxes, eg Ubuntu 20.04:
+
+`distrobox create -i ubuntu:20.04`
 
 Execute a command in a distrobox:
 
 `distrobox enter test -- command-to-execute`
+
+Upgrade all distroboxes at once:
+
+`distrobox upgrade --all`
 
 List running distroboxes:
 
@@ -249,6 +258,7 @@ Configuration files can be placed in the following paths, from the least importa
 to the most important:
 
 - /usr/share/distrobox/distrobox.conf
+- /usr/etc/distrobox/distrobox.conf
 - /etc/distrobox/distrobox.conf
 - ${HOME}/.config/distrobox/distrobox.conf
 - ${HOME}/.distroboxrc
@@ -261,6 +271,7 @@ container_user_custom_home="/home/.local/share/container-home-test"
 container_image="registry.opensuse.org/opensuse/toolbox:latest"
 container_manager="docker"
 container_name="test-name-1"
+container_entry=0
 non_interactive="1"
 skip_workdir="0"
 ```
@@ -272,6 +283,7 @@ Alternatively it is possible to specify preferences using ENV variables:
 - DBX_CONTAINER_IMAGE
 - DBX_CONTAINER_MANAGER
 - DBX_CONTAINER_NAME
+- DBX_CONTAINER_ENTRY
 - DBX_NON_INTERACTIVE
 - DBX_SKIP_WORKDIR
 
@@ -288,7 +300,15 @@ Thanks to the maintainers for their work: [M0Rf30](https://github.com/M0Rf30),
 [alcir](https://github.com/alcir), [dfaggioli](https://github.com/dfaggioli),
 [AtilaSaraiva](https://github.com/AtilaSaraiva), [michel-slm](https://github.com/michel-slm)
 
-Else, if you like to live your life dangerously, or you want the latest release,
+You can also [follow the guide to install in a rootless manner](posts/install_rootless.md)
+
+## Alternative methods
+
+Here is a list of alternative ways to install distrobox
+
+### Curl
+
+If you like to live your life dangerously, or you want the latest release,
 you can trust me and simply run this in your terminal:
 
 ```sh
@@ -313,6 +333,11 @@ or:
 curl -s https://raw.githubusercontent.com/89luca89/distrobox/main/install | sh -s -- --next --prefix ~/.local
 ```
 
+> **Warning**
+> Remember to add prefix-path-you-choose/bin to your PATH, to make it work.
+
+### Git
+
 Alternatively you can clone the project using `git clone` or using the latest
 release [HERE](https://github.com/89luca89/distrobox/releases/latest).
 
@@ -324,6 +349,34 @@ such as `./install --prefix ~/.distrobox`.
 Prefix explained: main distrobox files get installed to `${prefix}/bin` whereas
 the manpages get installed to `${prefix}/share/man`.
 
+### Flatpak
+
+⚠️ ⚠️ ⚠️  This is experimental! ⚠️ ⚠️ ⚠️
+
+You can find flatpak builds of distrobox here:
+[io.github.luca.distrobox](https://github.com/89luca89/io.github.luca.distrobox/releases)  
+Download the latest release flatpak and run
+
+```sh
+flatpak install io.github.luca.distrobox.flatpak
+```
+
+You can then run distrobox with:
+
+```sh
+flatpak run io.github.luca.distrobox create ...
+flatpak run io.github.luca.distrobox enter ...
+flatpak run io.github.luca.distrobox list ...
+[...]
+```
+
+It will  be handy to add an `alias distrobox="flatpak run io.github.luca.distrobox"` to your shell,
+so that you can run distrobox commands normally.
+
+Being experimental, please if you encounter problems, report them!
+
+---
+
 Check the [Host Distros](compatibility.md#host-distros) compatibility list for
 distro-specific instructions.
 
@@ -331,8 +384,12 @@ distro-specific instructions.
 
 Distrobox depends on a container manager to work, you can choose to install
 either podman or docker.
+
 Please look in the [Compatibility Table](compatibility.md#host-distros) for your
 distribution notes.
+
+There are ways to install [Podman without root privileges and in home.](compatibility.md#install-podman-in-a-static-manner)
+This should play well with completely sudoless setups and with devices like the Steam Deck.
 
 ---
 
